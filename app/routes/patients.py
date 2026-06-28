@@ -3,7 +3,7 @@ from marshmallow import ValidationError
 from sqlalchemy import or_
 
 from app import db
-from app.models.patient import Patient
+from app.models.patient import Patient, NO_SHOW_THRESHOLD
 from app.schemas.patient import PatientCreateSchema, PatientUpdateSchema, PatientQuerySchema
 from app.utils.errors import ApiException, success_response
 
@@ -129,3 +129,28 @@ def delete_patient(patient_id):
     db.session.delete(patient)
     db.session.commit()
     return success_response(None, '患者删除成功')
+
+
+@bp.route('/patients/blacklist', methods=['GET'])
+def get_blacklist():
+    query = Patient.query.filter(Patient.no_show_count >= NO_SHOW_THRESHOLD)
+    page = request.args.get('page', 1, type=int)
+    page_size = request.args.get('page_size', 20, type=int)
+    if page < 1:
+        page = 1
+    if page_size < 1 or page_size > 200:
+        page_size = 20
+
+    total = query.count()
+    pagination = query.order_by(Patient.updated_at.desc()).paginate(
+        page=page, per_page=page_size, error_out=False
+    )
+
+    data = {
+        'total': total,
+        'page': page,
+        'page_size': page_size,
+        'threshold': NO_SHOW_THRESHOLD,
+        'list': [p.to_dict() for p in pagination.items]
+    }
+    return success_response(data, '查询成功')

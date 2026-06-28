@@ -46,6 +46,7 @@ class Appointment(db.Model):
             'pending': '待确认',
             'confirmed': '已确认',
             'completed': '已完成',
-            'cancelled': '已取消'
+            'cancelled': '已取消',
+            'no_show': '未到诊'
         }
         return status_map.get(self.status, '未知')

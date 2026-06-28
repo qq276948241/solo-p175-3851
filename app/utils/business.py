@@ -8,6 +8,8 @@ LUNCH_END_HOUR = 13
 SLOT_MINUTES = 15
 CLOSED_WEEKDAY = 2
 WEEKEND_PEAK_END_HOUR = 12
+THURSDAY_WEEKDAY = 3
+MAINTENANCE_START_HOUR = 13
 
 
 def is_business_day(target_date):
@@ -20,6 +22,18 @@ def is_weekend(target_date):
     return target_date.weekday() >= 5
 
 
+def is_thursday_afternoon(target_date, time_str=None):
+    if target_date.weekday() != THURSDAY_WEEKDAY:
+        return False
+    if time_str is None:
+        return True
+    try:
+        hour = int(time_str.split(':')[0])
+        return hour >= MAINTENANCE_START_HOUR
+    except (ValueError, IndexError):
+        return False
+
+
 def generate_time_slots(target_date=None, include_weekend_peak=False):
     slots = []
     current_time = datetime(2000, 1, 1, BUSINESS_START_HOUR, 0)
@@ -27,10 +41,14 @@ def generate_time_slots(target_date=None, include_weekend_peak=False):
     lunch_start = datetime(2000, 1, 1, LUNCH_START_HOUR, 0)
     lunch_end = datetime(2000, 1, 1, LUNCH_END_HOUR, 0)
     weekend_peak_end = datetime(2000, 1, 1, WEEKEND_PEAK_END_HOUR, 0)
+    maintenance_start = datetime(2000, 1, 1, MAINTENANCE_START_HOUR, 0)
 
     if target_date and is_weekend(target_date):
         if include_weekend_peak:
             end_time = weekend_peak_end
+
+    if target_date and is_thursday_afternoon(target_date):
+        end_time = maintenance_start
 
     while current_time < end_time:
         if not (lunch_start <= current_time < lunch_end):

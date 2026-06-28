@@ -10,7 +10,7 @@ class AppointmentCreateSchema(Schema):
     chief_complaint = fields.Str(allow_none=True, validate=validate.Length(max=200, error='主诉长度不能超过200字'))
     notes = fields.Str(allow_none=True, validate=validate.Length(max=500, error='备注长度不能超过500字'))
     status = fields.Str(allow_none=True, load_default='pending', validate=validate.OneOf(
-        ['pending', 'confirmed', 'completed', 'cancelled'], error='状态值不正确'
+        ['pending', 'confirmed', 'completed', 'cancelled', 'no_show'], error='状态值不正确'
     ))
 
     @validates('appointment_date')
@@ -42,7 +42,7 @@ class AppointmentRescheduleSchema(Schema):
 
 class AppointmentUpdateStatusSchema(Schema):
     status = fields.Str(required=True, validate=validate.OneOf(
-        ['pending', 'confirmed', 'completed', 'cancelled'], error='状态值不正确，可选值：pending/confirmed/completed/cancelled'
+        ['pending', 'confirmed', 'completed', 'cancelled', 'no_show'], error='状态值不正确，可选值：pending/confirmed/completed/cancelled/no_show'
     ))
     notes = fields.Str(allow_none=True, validate=validate.Length(max=500, error='备注长度不能超过500字'))
 

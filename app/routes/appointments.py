@@ -13,7 +13,7 @@ from app.schemas.appointment import (
 from app.utils.errors import ApiException, success_response
 from app.utils.business import (
     is_business_day, validate_time_slot, parse_date,
-    get_available_slots
+    get_available_slots, is_thursday_afternoon
 )
 
 bp = Blueprint('appointments', __name__)
@@ -31,6 +31,9 @@ def create_appointment():
     if not patient:
         raise ApiException('患者不存在', 404)
 
+    if patient.is_blacklisted():
+        raise ApiException('该患者已被列入黑名单，暂无法新预约，请联系前台', 400)
+
     doctor = Doctor.query.get(data['doctor_id'])
     if not doctor:
         raise ApiException('医生不存在', 404)
@@ -43,6 +46,9 @@ def create_appointment():
 
     if not is_business_day(target_date):
         raise ApiException('周三全天休息，请选择其他日期', 400)
+
+    if is_thursday_afternoon(target_date, data['appointment_time']):
+        raise ApiException('周四下午诊所举办健康讲座，暂停新预约，请选择上午或其他日期', 400)
 
     if not validate_time_slot(data['appointment_time'], target_date):
         raise ApiException('预约时段不在营业时间范围内，营业时间：9:00-12:00，13:00-18:00', 400)
@@ -140,6 +146,8 @@ def reschedule_appointment(appointment_id):
         raise ApiException('已完成的预约无法改约', 400)
     if appointment.status == 'cancelled':
         raise ApiException('已取消的预约无法改约', 400)
+    if appointment.status == 'no_show':
+        raise ApiException('已标记未到诊的预约无法改约', 400)
 
     schema = AppointmentRescheduleSchema()
     try:
@@ -200,13 +208,27 @@ def update_appointment_status(appointment_id):
     except ValidationError as e:
         raise e
 
-    appointment.status = data['status']
+    old_status = appointment.status
+    new_status = data['status']
+
+    if old_status != new_status:
+        if new_status == 'no_show':
+            patient = Patient.query.get(appointment.patient_id)
+            if patient:
+                patient.record_no_show()
+        elif new_status == 'completed' and old_status != 'no_show':
+            patient = Patient.query.get(appointment.patient_id)
+            if patient:
+                patient.record_fulfill()
+
+    appointment.status = new_status
     if data.get('notes'):
         status_text_map = {
             'pending': '待确认',
             'confirmed': '已确认',
             'completed': '已完成',
-            'cancelled': '已取消'
+            'cancelled': '已取消',
+            'no_show': '未到诊'
         }
         status_text = status_text_map.get(data['status'], data['status'])
         appointment.notes = (appointment.notes + '\n' if appointment.notes else '') + f'[状态变更] {status_text}：{data["notes"]}'
@@ -244,6 +266,10 @@ def cancel_appointment(appointment_id):
 
     if appointment.status == 'completed':
         raise ApiException('已完成的预约无法取消', 400)
+    if appointment.status == 'cancelled':
+        raise ApiException('预约已取消，无需重复操作', 400)
+    if appointment.status == 'no_show':
+        raise ApiException('已标记未到诊的预约无法取消', 400)
 
     appointment.status = 'cancelled'
     db.session.commit()
