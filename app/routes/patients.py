@@ -3,7 +3,7 @@ from marshmallow import ValidationError
 from sqlalchemy import or_
 
 from app import db
-from app.models.patient import Patient, NO_SHOW_THRESHOLD
+from app.models.patient import Patient, NO_SHOW_THRESHOLD, CreditScoreLog
 from app.schemas.patient import PatientCreateSchema, PatientUpdateSchema, PatientQuerySchema
 from app.utils.errors import ApiException, success_response
 
@@ -72,7 +72,39 @@ def get_patient(patient_id):
     patient = Patient.query.get(patient_id)
     if not patient:
         raise ApiException('患者不存在', 404)
-    return success_response(patient.to_dict(), '查询成功')
+    include_logs = request.args.get('include_logs', 'false').lower() == 'true'
+    return success_response(patient.to_dict(include_logs=include_logs), '查询成功')
+
+
+@bp.route('/patients/<int:patient_id>/credit-logs', methods=['GET'])
+def get_patient_credit_logs(patient_id):
+    patient = Patient.query.get(patient_id)
+    if not patient:
+        raise ApiException('患者不存在', 404)
+
+    page = request.args.get('page', 1, type=int)
+    page_size = request.args.get('page_size', 20, type=int)
+    if page < 1:
+        page = 1
+    if page_size < 1 or page_size > 200:
+        page_size = 20
+
+    query = CreditScoreLog.query.filter_by(patient_id=patient_id).order_by(CreditScoreLog.created_at.desc())
+    total = query.count()
+    pagination = query.paginate(page=page, per_page=page_size, error_out=False)
+
+    data = {
+        'patient_id': patient_id,
+        'patient_name': patient.name,
+        'current_credit_score': patient.credit_score,
+        'no_show_count': patient.no_show_count,
+        'is_blacklisted': patient.is_blacklisted(),
+        'total': total,
+        'page': page,
+        'page_size': page_size,
+        'list': [log.to_dict() for log in pagination.items]
+    }
+    return success_response(data, '查询成功')
 
 
 @bp.route('/patients/phone/<phone>', methods=['GET'])

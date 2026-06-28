@@ -9,6 +9,21 @@ from app.utils.business import (
 )
 
 
+FULFILL_STATUSES = {'completed'}
+NO_SHOW_STATUSES = {'no_show'}
+NEUTRAL_STATUSES = {'pending', 'confirmed', 'cancelled', 'doctor_reschedule', 'patient_cancel'}
+
+STATUS_TEXT_MAP = {
+    'pending': '待确认',
+    'confirmed': '已确认',
+    'completed': '已完成',
+    'cancelled': '已取消',
+    'no_show': '未到诊',
+    'doctor_reschedule': '医生改约',
+    'patient_cancel': '患者取消'
+}
+
+
 class AppointmentService:
 
     @staticmethod
@@ -79,25 +94,24 @@ class AppointmentService:
         new_status = data['status']
 
         if old_status != new_status:
-            if new_status == 'no_show':
-                patient = Patient.query.get(appointment.patient_id)
-                if patient:
-                    patient.record_no_show()
-            elif new_status == 'completed' and old_status != 'no_show':
-                patient = Patient.query.get(appointment.patient_id)
-                if patient:
-                    patient.record_fulfill()
+            patient = Patient.query.get(appointment.patient_id)
+            if patient:
+                if new_status in NO_SHOW_STATUSES:
+                    if old_status not in NO_SHOW_STATUSES:
+                        patient.record_no_show(
+                            appointment_id=appointment_id,
+                            reason=f'预约状态由「{STATUS_TEXT_MAP.get(old_status, old_status)}」变更为「{STATUS_TEXT_MAP.get(new_status, new_status)}」，记为爽约'
+                        )
+                elif new_status in FULFILL_STATUSES:
+                    if old_status not in NO_SHOW_STATUSES and old_status not in FULFILL_STATUSES:
+                        patient.record_fulfill(
+                            appointment_id=appointment_id,
+                            reason=f'预约状态由「{STATUS_TEXT_MAP.get(old_status, old_status)}」变更为「{STATUS_TEXT_MAP.get(new_status, new_status)}」，正常履约'
+                        )
 
         appointment.status = new_status
         if data.get('notes'):
-            status_text_map = {
-                'pending': '待确认',
-                'confirmed': '已确认',
-                'completed': '已完成',
-                'cancelled': '已取消',
-                'no_show': '未到诊'
-            }
-            status_text = status_text_map.get(data['status'], data['status'])
+            status_text = STATUS_TEXT_MAP.get(data['status'], data['status'])
             appointment.notes = (appointment.notes + '\n' if appointment.notes else '') + f'[状态变更] {status_text}：{data["notes"]}'
 
         db.session.commit()
@@ -242,18 +256,20 @@ class AppointmentService:
 
     @staticmethod
     def _validate_can_reschedule(appointment):
-        if appointment.status == 'completed':
+        if appointment.status in FULFILL_STATUSES:
             raise ApiException('已完成的预约无法改约', 400)
-        if appointment.status == 'cancelled':
-            raise ApiException('已取消的预约无法改约', 400)
-        if appointment.status == 'no_show':
+        if appointment.status in NO_SHOW_STATUSES:
             raise ApiException('已标记未到诊的预约无法改约', 400)
+        if appointment.status in {'cancelled', 'doctor_reschedule', 'patient_cancel'}:
+            raise ApiException(f'预约状态为「{STATUS_TEXT_MAP.get(appointment.status)}」，无法改约', 400)
 
     @staticmethod
     def _validate_can_cancel(appointment):
-        if appointment.status == 'completed':
+        if appointment.status in FULFILL_STATUSES:
             raise ApiException('已完成的预约无法取消', 400)
+        if appointment.status in NO_SHOW_STATUSES:
+            raise ApiException('已标记未到诊的预约无法取消', 400)
         if appointment.status == 'cancelled':
             raise ApiException('预约已取消，无需重复操作', 400)
-        if appointment.status == 'no_show':
-            raise ApiException('已标记未到诊的预约无法取消', 400)
+        if appointment.status in {'doctor_reschedule', 'patient_cancel'}:
+            raise ApiException(f'预约状态为「{STATUS_TEXT_MAP.get(appointment.status)}」，无需重复取消', 400)

@@ -2,6 +2,9 @@ import re
 from marshmallow import Schema, fields, validate, validates, ValidationError
 
 
+VALID_STATUSES = ['pending', 'confirmed', 'completed', 'cancelled', 'no_show', 'doctor_reschedule', 'patient_cancel']
+
+
 class AppointmentCreateSchema(Schema):
     patient_id = fields.Int(required=True, validate=validate.Range(min=1, error='患者ID不正确'))
     doctor_id = fields.Int(required=True, validate=validate.Range(min=1, error='医生ID不正确'))
@@ -10,7 +13,7 @@ class AppointmentCreateSchema(Schema):
     chief_complaint = fields.Str(allow_none=True, validate=validate.Length(max=200, error='主诉长度不能超过200字'))
     notes = fields.Str(allow_none=True, validate=validate.Length(max=500, error='备注长度不能超过500字'))
     status = fields.Str(allow_none=True, load_default='pending', validate=validate.OneOf(
-        ['pending', 'confirmed', 'completed', 'cancelled', 'no_show'], error='状态值不正确'
+        VALID_STATUSES, error='状态值不正确'
     ))
 
     @validates('appointment_date')
@@ -42,7 +45,7 @@ class AppointmentRescheduleSchema(Schema):
 
 class AppointmentUpdateStatusSchema(Schema):
     status = fields.Str(required=True, validate=validate.OneOf(
-        ['pending', 'confirmed', 'completed', 'cancelled', 'no_show'], error='状态值不正确，可选值：pending/confirmed/completed/cancelled/no_show'
+        VALID_STATUSES, error='状态值不正确，可选值：pending/confirmed/completed/cancelled/no_show/doctor_reschedule/patient_cancel'
     ))
     notes = fields.Str(allow_none=True, validate=validate.Length(max=500, error='备注长度不能超过500字'))
 

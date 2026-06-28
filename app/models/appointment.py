@@ -10,7 +10,7 @@ class Appointment(db.Model):
     doctor_id = db.Column(db.Integer, db.ForeignKey('doctors.id'), nullable=False, comment='医生ID')
     appointment_date = db.Column(db.Date, nullable=False, index=True, comment='预约日期')
     appointment_time = db.Column(db.String(10), nullable=False, comment='预约时段(HH:MM)')
-    status = db.Column(db.String(20), default='pending', comment='状态:pending-待确认 confirmed-已确认 completed-已完成 cancelled-已取消')
+    status = db.Column(db.String(30), default='pending', comment='状态:pending-待确认 confirmed-已确认 completed-已完成 cancelled-已取消 no_show-未到诊 doctor_reschedule-医生改约 patient_cancel-患者取消')
     chief_complaint = db.Column(db.String(200), comment='主诉')
     notes = db.Column(db.String(500), comment='备注')
     created_at = db.Column(db.DateTime, default=datetime.now, comment='创建时间')
@@ -47,6 +47,8 @@ class Appointment(db.Model):
             'confirmed': '已确认',
             'completed': '已完成',
             'cancelled': '已取消',
-            'no_show': '未到诊'
+            'no_show': '未到诊',
+            'doctor_reschedule': '医生改约',
+            'patient_cancel': '患者取消'
         }
         return status_map.get(self.status, '未知')
